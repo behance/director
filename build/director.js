@@ -1,7 +1,7 @@
 
 
 //
-// Generated on Wed May 21 2014 15:14:41 GMT-0400 (EDT) by Nodejitsu, Inc (Using Codesurgeon).
+// Generated on Wed May 21 2014 16:25:45 GMT-0400 (EDT) by Nodejitsu, Inc (Using Codesurgeon).
 // Version 1.2.3
 //
 
@@ -454,9 +454,16 @@ Router.prototype.on = Router.prototype.route = function(method, path, route) {
 };
 
 Router.prototype.dispatch = function(method, path, callback) {
-  var self = this, fns = this.traverse(method, path, this.routes, ""), invoked = this._invoked, after;
+  var self = this, fns = this.traverse(method, path, this.routes, ""), invoked = this._invoked, matchingRoutes = fns && fns.length > 0, updateFunc, after;
   this._invoked = true;
-  if (!fns || fns.length === 0) {
+  if (this.recurse === "forward" && matchingRoutes) {
+    fns = fns.reverse();
+  }
+  function updateAndInvoke() {
+    self.last = fns.after;
+    self.invoke(self.runlist(fns), self, callback);
+  }
+  function updateAndInvokeNotFound() {
     this.last = [];
     if (typeof this.notfound === "function") {
       this.invoke([ this.notfound ], {
@@ -464,27 +471,20 @@ Router.prototype.dispatch = function(method, path, callback) {
         path: path
       }, callback);
     }
-    return false;
-  }
-  if (this.recurse === "forward") {
-    fns = fns.reverse();
-  }
-  function updateAndInvoke() {
-    self.last = fns.after;
-    self.invoke(self.runlist(fns), self, callback);
   }
   after = this.every && this.every.after ? [ this.every.after ].concat(this.last) : [ this.last ];
+  updateFunc = matchingRoutes ? updateAndInvoke : updateAndInvokeNotFound;
   if (after && after.length > 0 && invoked) {
     if (this.async) {
-      this.invoke(after, this, updateAndInvoke);
+      this.invoke(after, this, updateFunc);
     } else {
       this.invoke(after, this);
-      updateAndInvoke();
+      updateFunc();
     }
-    return true;
+    return matchingRoutes;
   }
-  updateAndInvoke();
-  return true;
+  updateFunc();
+  return matchingRoutes;
 };
 
 Router.prototype.invoke = function(fns, thisArg, callback) {
